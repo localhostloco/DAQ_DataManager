@@ -1,0 +1,15 @@
+Bundle-Version: 1.0.0.${tstamp}
+Bundle-Name: DataManager
+Bundle-Description: This bundle is responsible for acquiring the data and formatting it according \
+	to the definitions of the driver interface
+Bundle-Vendor: Daniel Susumu
+Bundle-Activator: datamanager.impl.Activator
+-runfw: org.eclipse.osgi;version='[3.10.1.v20140909-1633,3.10.1.v20140909-1633]'
+Private-Package:  \
+	datamanager.impl,\
+	datamanager,\
+	datamanager.tracker
+-runee: JavaSE-1.8
+Export-Package:  \
+	datamanager.impl,\
+	datamanager
