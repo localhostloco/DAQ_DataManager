@@ -21,43 +21,65 @@ import datamanager.tracker.LoggersTrackerCustomizer;
 
 public class DataManagerImpl implements DataManager, Runnable {
 
+	// Lista de Loggers
 	private List<DataLogger> loggers;
-	private boolean stop;
-	private boolean first;
-	private boolean formatFileHeader;
-	private boolean createNewFile;
-	private boolean noLoggersMessage;
-	private int counter;
-	private int period;
-	private ServiceTracker tracker;
-	private BundleContext context;
-	private String currentTimestamp;
 
+	// Control del estado del DataManager
+	private boolean stop;
+
+	// Control del listener de los servicios de la interfaz DataLogger
+	private boolean first;
+
+	// Control del formateo del log
+	private boolean formatFileHeader;
+
+	// Control de mensajes de información
+	private boolean noLoggersMessage;
+
+	// Periodo local del DataManager
+	private int period;
+
+	// Tracker de servicios de la interfaz DataLogger
+	private ServiceTracker tracker;
+
+	// Contexto de la ejecución
+	private BundleContext context;
+
+	// Marca de tiempo actual en milisegundos desde 01/01/1970
+	private long currentTimestamp;
+
+	// Constructor
 	public DataManagerImpl() {
-		// Initialization of variables
 		stop = false;
-		createNewFile = false;
 		noLoggersMessage = false;
 		first = true;
 		loggers = new ArrayList<DataLogger>();
-		counter = 0;
-		currentTimestamp = today();
+		currentTimestamp = nowLong();
 		period = PERIOD;
 	}
 
 	public void run() {
 
-		System.out.println("<DataManager Bundle> " + new SimpleDateFormat("HH:mm:ss").format(Calendar
-				.getInstance().getTime()));
+		System.out.println("<DataManager Bundle> "
+				+ new SimpleDateFormat("HH:mm:ss").format(Calendar
+						.getInstance().getTime()));
+		
+		// Bucle de ejecución
 		while (!stop && !Thread.currentThread().isInterrupted()) {
+			
+			// Creación del archivo de log
 			File f = new File(FILE_PATH + currentTimestamp + "-"
 					+ loggers.size() + ".txt");
 			if (f.exists()) {
 				formatFileHeader = false;
 			} else {
 				formatFileHeader = true;
+				System.out.println(currentTimestamp);
 			}
+			
 			String line = "";
+			
+			// Gestión del inicio del tracker
 			if (first) {
 				first = false;
 				LoggersTrackerCustomizer customizer = new LoggersTrackerCustomizer(
@@ -66,26 +88,39 @@ public class DataManagerImpl implements DataManager, Runnable {
 				tracker = new ServiceTracker<>(context,
 						DataLogger.class.getName(), customizer);
 				tracker.open();
-
 			}
+			
+			// Gestión de la cabecera del log
 			if (formatFileHeader)
 				line = formatHeader(line);
+			
+			// Si hay al menos un Logger en la lista
 			if (!loggers.isEmpty()) {
 				try {
-					long millis = System.currentTimeMillis();
+					// Marca de tiempo relativa
+					long millis = System.currentTimeMillis() - currentTimestamp;
+					
 					line += millis + "|";
 					boolean firstData = true;
+					
+					// Lectura de Loggers
 					for (DataLogger dl : loggers) {
 						if (dl.isActivated()) {
 							dl.readValue();
+							
+							// Creación de la variable lectura
 							DataEntry de = new DataEntry(dl.getCurrentValue(),
 									millis);
+							
+							// Gestión de escritura del log para Loggers activados
 							if (firstData) {
 								line += de.getValue();
 								firstData = false;
 							} else {
 								line += "|" + de.getValue();
 							}
+						
+							// Gestión de escritura del log para Loggers desactivados
 						} else {
 							if (firstData) {
 								line += "null";
@@ -95,18 +130,27 @@ public class DataManagerImpl implements DataManager, Runnable {
 							}
 						}
 					}
+					
+					// Escritura del log
 					outputLog(line);
-					if (!currentTimestamp.equals(today())) {
-						currentTimestamp = today();
+					
+					// Gestión de límite de lecturas
+					/*
+					 * Posible mejora -> atributo
+					 */
+					if (currentTimestamp - nowLong() > 86400000) {
+						currentTimestamp = nowLong();
 						formatFileHeader = true;
 					}
+					
+					// Pausa entre lecturas
 					try {
 						Thread.sleep(period);
 					} catch (InterruptedException e) {
 
 					}
 
-					// ***** Exceptions *****
+					// ***** Excepciones *****
 				} catch (FileNotFoundException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
@@ -114,25 +158,29 @@ public class DataManagerImpl implements DataManager, Runnable {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
-			}
-			else {
+				
+			// Mensaje de información
+			} else {
 				if (noLoggersMessage) {
-					System.out.println("<DataManager Bundle> " + "There are no loggers online.");
-					noLoggersMessage = true;
+					System.out.println("<DataManager Bundle> "
+							+ "There are no loggers online.");
 				}
 			}
 		}
 	}
 
-	// ***** The following methods are used by the Activator *****
-
 	public void addLogger(DataLogger dl) {
+		
+		// Control de la presencia de un Logger
 		DataLogger d = containsLogger(dl);
+		
+		// Si no está en la lista, se le añade a la lista
 		if (d == null) {
 			dl.activate();
 			loggers.add(dl);
-			createNewFile = true;
 			formatFileHeader = true;
+			
+		// Sino se activa su funcionamiento
 		} else {
 			d.activate();
 		}
@@ -142,6 +190,10 @@ public class DataManagerImpl implements DataManager, Runnable {
 		this.context = context;
 	}
 
+	// Eliminación de un Logger de la lista
+	/*
+	 * Posible mejora -> comprobar necesidad del método
+	 */
 	public void deleteLogger(DataLogger dl) {
 		// if (loggers.contains(dl))
 		// loggers.remove(dl);
@@ -149,6 +201,8 @@ public class DataManagerImpl implements DataManager, Runnable {
 
 	public void STOP_RUNNING() {
 		stop = true;
+		
+		// Detenimiento de todos los Loggers
 		for (DataLogger dlogger : loggers) {
 			try {
 				dlogger.stop();
@@ -166,6 +220,8 @@ public class DataManagerImpl implements DataManager, Runnable {
 
 	public DataLogger containsLogger(DataLogger dl) {
 		for (DataLogger dlogger : loggers) {
+			
+			// La comprobación se hace en función del nombre del Logger
 			if (dlogger.getDriverName().equals(dl.getDriverName())) {
 				return dlogger;
 			}
@@ -182,14 +238,17 @@ public class DataManagerImpl implements DataManager, Runnable {
 		}
 	}
 
-	public String today() {
+	public String nowString() {
 		return new SimpleDateFormat("yyyyMMdd").format(Calendar.getInstance()
 				.getTime());
 	}
 
+	public long nowLong() {
+		return System.currentTimeMillis();
+	}
+
 	public String formatHeader(String line) {
 		formatFileHeader = false;
-		createNewFile = false;
 		boolean firstLogger = true;
 		for (DataLogger datalogger : loggers) {
 			if (firstLogger) {
@@ -202,11 +261,11 @@ public class DataManagerImpl implements DataManager, Runnable {
 		line += "\n";
 		return line;
 	}
-	
+
 	public void setPeriod(int period) {
 		this.period = period;
 	}
-	
+
 	public int getPeriod() {
 		return period;
 	}
